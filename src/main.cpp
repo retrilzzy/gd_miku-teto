@@ -77,7 +77,7 @@ class $modify(MyPlayLayer, PlayLayer) {
             CCSequence::create(scaleUp, scaleDown, nullptr)));
       }
 
-      this->addChild(sprite);
+      this->m_uiLayer->addChild(sprite);
     };
 
     float index = 0.f;
