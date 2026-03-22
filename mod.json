@@ -6,14 +6,14 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v0.1.0",
+	"version": "v0.1.1",
 	"id": "retrilz.miku-teto",
 	"name": "Miku & Teto Border",
 	"developer": "retrilz",
 	"description": "Adds a Miku & Teto border to every level!",
 	"links": {
 		"source": "https://github.com/retrilzzy/gd_miku-teto",
-		"website": "https://rzx.ovh/"
+		"website": "https://rzx.ovh"
 	},
 	"tags": [
 		"customization",
@@ -43,10 +43,10 @@
 			"description": "Distance from the screen edges.",
 			"default": 15
 		},
-		"char-mode": {
+		"sprite-mode": {
 			"type": "string",
-			"name": "Character Mode",
-			"description": "Which characters appear and where.",
+			"name": "Sprite Mode",
+			"description": "Which sprites appear and where.",
 			"default": "Fully Random",
 			"one-of": [
 				"Fully Random",
