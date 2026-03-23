@@ -6,14 +6,14 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v0.1.2",
+	"version": "v0.1.3",
 	"id": "retrilz.miku-teto",
 	"name": "Miku & Teto Border",
 	"developer": "retrilz",
 	"description": "Adds a Miku & Teto border to every level!",
 	"links": {
 		"source": "https://github.com/retrilzzy/gd_miku-teto",
-		"website": "https://rzx.ovh"
+		"homepage": "https://rzx.ovh"
 	},
 	"tags": [
 		"customization",
