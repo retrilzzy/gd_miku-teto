@@ -1,7 +1,11 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/PlayLayer.hpp>
 
-using namespace geode::prelude;
+namespace ZOrder {
+constexpr int BehindHud = 1;
+constexpr int AboveHud = 100;
+constexpr int Sprite = -100;
+}
 
 enum class SpriteMode {
   Random,
@@ -12,27 +16,21 @@ enum class SpriteMode {
   LeftMiku
 };
 
-class $modify(HypePlayLayer, PlayLayer) {
-  bool init(GJGameLevel *level, bool useReplay, bool dontCreateObjects) {
-    if (!PlayLayer::init(level, useReplay, dontCreateObjects)) {
-      return false;
-    }
+struct HypeSettings {
+  int64_t m_spacing;
+  SpriteMode m_mode;
+  double m_hypeStrength;
+  int64_t m_spriteSize;
+  int64_t m_margin;
+  bool m_showTop;
+  bool m_renderBehindHud;
 
-    auto winSize = CCDirector::sharedDirector()->getWinSize();
+  static HypeSettings load() {
+    auto mod = geode::Mod::get();
 
-    // Retrieve mod settings
-    int64_t spacing = Mod::get()->getSettingValue<int64_t>("spacing");
-    std::string modeStr =
-        Mod::get()->getSettingValue<std::string>("sprite-mode");
-    double hypeStrength =
-        Mod::get()->getSettingValue<int64_t>("hype-strength") / 100.0;
-    int64_t spriteSize = Mod::get()->getSettingValue<int64_t>("sprite-size");
-    int64_t margin = Mod::get()->getSettingValue<int64_t>("margin");
+    const std::string modeStr =
+        mod->getSettingValue<std::string>("sprite-mode");
 
-    float marginF = static_cast<float>(margin);
-    float sizeF = static_cast<float>(spriteSize);
-
-    // Parse sprite mode setting once (optimizes out string comparison in loop)
     SpriteMode mode = SpriteMode::Random;
     if (modeStr == "Miku Only")
       mode = SpriteMode::MikuOnly;
@@ -45,106 +43,157 @@ class $modify(HypePlayLayer, PlayLayer) {
     else if (modeStr == "Alternating")
       mode = SpriteMode::Alternating;
 
-    // Lambda to add a border sprite at a specific position with
-    // a sequence index
-    auto addBorderSprite = [&](CCPoint pos, int index) {
-      bool isTeto = false;
+    return {mod->getSettingValue<int64_t>("spacing"),
+            mode,
+            mod->getSettingValue<int64_t>("hype-strength") / 100.0,
+            mod->getSettingValue<int64_t>("sprite-size"),
+            mod->getSettingValue<int64_t>("margin"),
+            mod->getSettingValue<bool>("show-top"),
+            mod->getSettingValue<bool>("render-behind-hud")};
+  }
+};
 
-      switch (mode) {
-      case SpriteMode::MikuOnly:
-        isTeto = false;
-        break;
-      case SpriteMode::TetoOnly:
-        isTeto = true;
-        break;
-      case SpriteMode::LeftTeto:
-        isTeto = (pos.x < winSize.width / 2.f);
-        break;
-      case SpriteMode::LeftMiku:
-        isTeto = (pos.x >= winSize.width / 2.f);
-        break;
-      case SpriteMode::Alternating:
-        isTeto = (index % 2 == 0);
-        break;
-      case SpriteMode::Random:
-      default:
-        isTeto = (std::rand() % 2 == 0);
-        break;
-      }
+class $modify(HypePlayLayer, PlayLayer) {
+  struct Fields {
+    CCNode *m_borderContainer = nullptr;
+    bool m_renderBehindHud = true;
+  };
 
-      auto spriteName = isTeto ? "teto.png"_spr : "miku.png"_spr;
-      auto sprite = CCSprite::create(spriteName);
-      if (!sprite)
-        return;
+  bool init(GJGameLevel *level, bool useReplay, bool dontCreateObjects) {
+    if (!PlayLayer::init(level, useReplay, dontCreateObjects))
+      return false;
 
-      // Set basic scale and rotation based on index and parameters
-      auto texSize = sprite->getContentSize();
-      float baseScale = sizeF / std::max(texSize.width, texSize.height);
-      float scaleInfo = baseScale + std::fmod(index * 0.05f, baseScale * 0.5f);
+    auto settings = HypeSettings::load();
+    m_fields->m_renderBehindHud = settings.m_renderBehindHud;
 
-      sprite->setScale(scaleInfo);
-      sprite->setRotation(std::fmod(index * 47.f, 360.f));
-      sprite->setPosition(pos);
-      sprite->setZOrder(95);
+    auto *container = CCNode::create();
 
-      // Periodically add blend effects for specific sprites to create variety
-      if (index % 3 == 0) {
-        sprite->setBlendFunc({GL_SRC_ALPHA, GL_ONE});
-        sprite->setColor(isTeto ? ccColor3B{255, 100, 100}
-                                : ccColor3B{100, 255, 220});
-        sprite->setOpacity(200);
-      }
-
-      // Apply animations scaling with hype strength
-      if (hypeStrength > 0.0) {
-        float rotSpeed = (15.f + std::fmod(index * 4.f, 10.f)) * hypeStrength;
-        // Alternate rotation direction
-        if (index % 2 == 0)
-          rotSpeed = -rotSpeed;
-
-        float duration = 15.f / std::max(0.1f, std::abs(rotSpeed));
-        sprite->runAction(CCRepeatForever::create(
-            CCRotateBy::create(duration, rotSpeed > 0 ? 360.f : -360.f)));
-
-        // Pulsing animation
-        float beatDur = 0.43f;
-        float pulseTarget = scaleInfo * (1.0f + 0.15f * hypeStrength);
-
-        auto scaleUp = CCScaleTo::create(beatDur / 2.f, pulseTarget);
-        auto scaleDown = CCScaleTo::create(beatDur / 2.f, scaleInfo);
-        sprite->runAction(CCRepeatForever::create(
-            CCSequence::create(scaleUp, scaleDown, nullptr)));
-      }
-
-      this->m_uiLayer->addChild(sprite);
-    };
-
-    float actualSpacing = std::max(10.f, static_cast<float>(spacing));
-
-    // Generate top and bottom borders
-    int countX = std::max(
-        1, static_cast<int>((winSize.width - marginF * 2.f) / actualSpacing));
-    float realSpacingX =
-        countX > 0 ? (winSize.width - marginF * 2.f) / countX : 0.f;
-
-    for (int i = 0; i <= countX; i++) {
-      float x = marginF + i * realSpacingX;
-      addBorderSprite({x, marginF}, i);                  // Bottom
-      addBorderSprite({x, winSize.height - marginF}, i); // Top
+    if (settings.m_renderBehindHud) {
+      this->addChild(container, ZOrder::BehindHud);
+    } else if (m_uiLayer) {
+      m_uiLayer->addChild(container, ZOrder::AboveHud);
     }
 
-    // Generate left and right borders
-    int countY = std::max(
-        1, static_cast<int>((winSize.height - marginF * 2.f) / actualSpacing));
-    float realSpacingY =
-        countY > 0 ? (winSize.height - marginF * 2.f) / countY : 0.f;
-
-    for (int i = 1; i < countY; i++) {
-      float y = marginF + i * realSpacingY;
-      addBorderSprite({marginF, y}, i);                 // Left
-      addBorderSprite({winSize.width - marginF, y}, i); // Right
-    }
+    m_fields->m_borderContainer = container;
+    this->createBorders(settings);
 
     return true;
+  }
+
+  void update(float dt) override {
+    PlayLayer::update(dt);
+
+    // Compensate for camera movement to keep the borders static on the screen
+    if (m_fields->m_borderContainer && m_objectLayer &&
+        m_fields->m_renderBehindHud) {
+      m_fields->m_borderContainer->setPosition(-m_objectLayer->getPosition());
+    }
+  }
+
+  void createBorders(const HypeSettings &settings) {
+    auto winSize = geode::prelude::CCDirector::sharedDirector()->getWinSize();
+    float margin = static_cast<float>(settings.m_margin);
+    float spacing = std::max(10.f, static_cast<float>(settings.m_spacing));
+
+    // Calculate the number of sprites and exact spacing
+    int countX =
+        std::max(1, static_cast<int>((winSize.width - margin * 2.f) / spacing));
+    float spacingX = (winSize.width - margin * 2.f) / countX;
+
+    for (int i = 0; i <= countX; ++i) {
+      float x = margin + i * spacingX;
+      addBorderSprite({x, margin}, i, settings);
+      if (settings.m_showTop)
+        addBorderSprite({x, winSize.height - margin}, i, settings);
+    }
+
+    int countY = std::max(
+        1, static_cast<int>((winSize.height - margin * 2.f) / spacing));
+    float spacingY = (winSize.height - margin * 2.f) / countY;
+
+    for (int i = 1; i < countY; ++i) {
+      float y = margin + i * spacingY;
+      addBorderSprite({margin, y}, i, settings);
+      addBorderSprite({winSize.width - margin, y}, i, settings);
+    }
+  }
+
+  void addBorderSprite(geode::prelude::CCPoint pos, int index,
+                       const HypeSettings &settings) {
+    if (!m_fields->m_borderContainer)
+      return;
+
+    auto winSize = geode::prelude::CCDirector::sharedDirector()->getWinSize();
+
+    bool isTeto = false;
+    switch (settings.m_mode) {
+    case SpriteMode::MikuOnly:
+      isTeto = false;
+      break;
+    case SpriteMode::TetoOnly:
+      isTeto = true;
+      break;
+    case SpriteMode::LeftTeto:
+      isTeto = (pos.x < winSize.width / 2.f);
+      break;
+    case SpriteMode::LeftMiku:
+      isTeto = (pos.x >= winSize.width / 2.f);
+      break;
+    case SpriteMode::Alternating:
+      isTeto = (index % 2 == 0);
+      break;
+    case SpriteMode::Random:
+      isTeto = (std::rand() % 2 == 0);
+      break;
+    }
+
+    auto *sprite = geode::prelude::CCSprite::create(isTeto ? "teto.png"_spr
+                                                           : "miku.png"_spr);
+    if (!sprite)
+      return;
+
+    auto texSize = sprite->getContentSize();
+    float sizeF = static_cast<float>(settings.m_spriteSize);
+
+    // Base scale and random variance using fmod
+    float baseScale = sizeF / std::max(texSize.width, texSize.height);
+    float scale = baseScale + std::fmod(index * 0.05f, baseScale * 0.5f);
+
+    sprite->setScale(scale);
+    sprite->setRotation(std::fmod(index * 47.f, 360.f));
+    sprite->setPosition(pos);
+
+    // Make every 3rd sprite semi-transparent with additive blending
+    if (index % 3 == 0) {
+      sprite->setBlendFunc({GL_SRC_ALPHA, GL_ONE});
+      sprite->setColor(isTeto ? geode::prelude::ccColor3B{255, 100, 100}
+                              : geode::prelude::ccColor3B{100, 255, 220});
+      sprite->setOpacity(200);
+    }
+
+    if (settings.m_hypeStrength > 0.0) {
+      // Calculate rotation speed; even/odd indices rotate in opposite
+      // directions
+      float rotSpeed = (15.f + std::fmod(index * 4.f, 10.f)) *
+                       static_cast<float>(settings.m_hypeStrength);
+      if (index % 2 == 0)
+        rotSpeed = -rotSpeed;
+
+      // Time taken for the sprite to complete a full rotation
+      float spinDuration = 15.f / std::max(0.1f, std::abs(rotSpeed));
+      float spinAngle = rotSpeed > 0 ? 360.f : -360.f;
+      sprite->runAction(geode::prelude::CCRepeatForever::create(
+          geode::prelude::CCRotateBy::create(spinDuration, spinAngle)));
+
+      // Pulsation animation
+      float beatHalf = 0.43f / 2.f;
+      float pulseScale =
+          scale * (1.0f + 0.15f * static_cast<float>(settings.m_hypeStrength));
+      sprite->runAction(geode::prelude::CCRepeatForever::create(
+          geode::prelude::CCSequence::create(
+              geode::prelude::CCScaleTo::create(beatHalf, pulseScale),
+              geode::prelude::CCScaleTo::create(beatHalf, scale), nullptr)));
+    }
+    m_fields->m_borderContainer->addChild(sprite, ZOrder::Sprite);
   }
 };

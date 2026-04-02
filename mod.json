@@ -1,12 +1,12 @@
 {
-	"geode": "5.3.0",
+	"geode": "5.4.1",
 	"gd": {
 		"win": "2.2081",
 		"android": "2.2081",
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v0.1.3",
+	"version": "v0.1.4",
 	"id": "retrilz.miku-teto",
 	"name": "Miku & Teto Border",
 	"developer": "retrilz",
@@ -62,6 +62,18 @@
 			"name": "Hype Strength (%)",
 			"description": "Multiplier for rotational speed and pulse scale.",
 			"default": 35
+		},
+		"show-top": {
+			"type": "bool",
+			"name": "Show Top Border",
+			"description": "Whether to display sprites on the top edge of the screen.",
+			"default": true
+		},
+		"render-behind-hud": {
+			"type": "bool",
+			"name": "Render Behind HUD",
+			"description": "Whether the sprites should render behind or on top of the UI elements.",
+			"default": true
 		}
 	}
 }
