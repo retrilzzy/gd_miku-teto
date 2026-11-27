@@ -4,7 +4,6 @@
 #include <Geode/Geode.hpp>
 #include <Geode/modify/GJBaseGameLayer.hpp>
 #include <Geode/modify/PlayLayer.hpp>
-#include <Geode/modify/PlayerObject.hpp>
 
 using namespace geode::prelude;
 
@@ -23,14 +22,41 @@ class $modify(HypePlayLayer, PlayLayer) {
         m_fields->m_renderBehindHud = settings.m_renderBehindHud;
 
         auto* container = BorderContainer::create(settings);
-        if (settings.m_renderBehindHud) {
-            this->addChild(container, zorder::behindHud);
-        } else if (m_uiLayer) {
-            m_uiLayer->addChild(container, zorder::aboveHud);
+        if (container) {
+            if (settings.m_renderBehindHud) {
+                this->addChild(container, zorder::behindHud);
+                m_fields->m_borderContainer = container;
+            } else if (m_uiLayer) {
+                m_uiLayer->addChild(container, zorder::aboveHud);
+                m_fields->m_borderContainer = container;
+            }
         }
 
-        m_fields->m_borderContainer = container;
         return true;
+    }
+
+    void destroyPlayer(PlayerObject* player, GameObject* object) override {
+        PlayLayer::destroyPlayer(player, object);
+
+        if (m_fields->m_borderContainer && player && player->m_isDead) {
+            m_fields->m_borderContainer->resetInputState();
+        }
+    }
+
+    void levelComplete() {
+        PlayLayer::levelComplete();
+
+        if (m_fields->m_borderContainer) {
+            m_fields->m_borderContainer->resetInputState();
+        }
+    }
+
+    void resetLevel() override {
+        PlayLayer::resetLevel();
+
+        if (m_fields->m_borderContainer) {
+            m_fields->m_borderContainer->resetInputState();
+        }
     }
 
     void update(float dt) override {
@@ -52,38 +78,18 @@ class $modify(HypeBaseGameLayer, GJBaseGameLayer) {
         if (auto* playLayer = typeinfo_cast<PlayLayer*>(this)) {
             auto* hypeLayer = static_cast<HypePlayLayer*>(playLayer);
             if (auto* container = hypeLayer->m_fields->m_borderContainer) {
+                bool isAttemptEnded =
+                    (playLayer->m_player1 && playLayer->m_player1->m_isDead) ||
+                    playLayer->m_hasCompletedLevel ||
+                    playLayer->m_levelEndAnimationStarted;
                 if (down) {
-                    container->onPlayerPush();
+                    if (!isAttemptEnded) {
+                        container->onPlayerPush();
+                    }
                 } else {
                     container->onPlayerRelease();
                 }
             }
         }
-    }
-};
-
-class $modify(HypePlayerObject, PlayerObject) {
-    bool pushButton(PlayerButton button) {
-        bool res = PlayerObject::pushButton(button);
-
-        if (auto* playLayer = PlayLayer::get()) {
-            auto* hypeLayer = static_cast<HypePlayLayer*>(playLayer);
-            if (auto* container = hypeLayer->m_fields->m_borderContainer) {
-                container->onPlayerPush();
-            }
-        }
-        return res;
-    }
-
-    bool releaseButton(PlayerButton button) {
-        bool res = PlayerObject::releaseButton(button);
-
-        if (auto* playLayer = PlayLayer::get()) {
-            auto* hypeLayer = static_cast<HypePlayLayer*>(playLayer);
-            if (auto* container = hypeLayer->m_fields->m_borderContainer) {
-                container->onPlayerRelease();
-            }
-        }
-        return res;
     }
 };

@@ -34,12 +34,19 @@ bool BorderContainer::init(HypeSettings const& settings) {
 }
 
 void BorderContainer::onPlayerPush() {
-    m_isHolding = true;
+    ++m_heldInputs;
     m_pressImpulse = 1.0f;
 }
 
 void BorderContainer::onPlayerRelease() {
-    m_isHolding = false;
+    if (m_heldInputs > 0) {
+        --m_heldInputs;
+    }
+}
+
+void BorderContainer::resetInputState() {
+    m_heldInputs = 0;
+    m_pressImpulse = 0.0f;
 }
 
 void BorderContainer::update(float dt) {
@@ -57,21 +64,26 @@ void BorderContainer::update(float dt) {
     float targetPulseBoost = 0.0f;
 
     if (m_clickSync) {
-        if (m_isHolding) {
+        if (m_heldInputs > 0) {
             targetSpinMult = m_clickSpinBoost;
-            targetPulseBoost = 0.20f * m_clickPulseBoost;
+            targetPulseBoost =
+                std::max(0.13f, m_pressImpulse * 0.16f) * m_clickPulseBoost;
         } else if (m_pressImpulse > 0.001f) {
             targetSpinMult =
                 1.0f + m_pressImpulse * (m_clickSpinBoost - 1.0f);
             targetPulseBoost =
-                m_pressImpulse * 0.25f * m_clickPulseBoost;
+                m_pressImpulse * 0.16f * m_clickPulseBoost;
         }
     }
 
-    float lerpRate = std::min(1.0f, dt * 14.0f);
-    m_currentSpinMult += (targetSpinMult - m_currentSpinMult) * lerpRate;
+    float spinRate = (targetSpinMult > m_currentSpinMult) ? 14.0f : 5.0f;
+    float pulseRate = (targetPulseBoost > m_currentPulseBoost) ? 14.0f : 5.0f;
+
+    m_currentSpinMult +=
+        (targetSpinMult - m_currentSpinMult) * std::min(1.0f, dt * spinRate);
     m_currentPulseBoost +=
-        (targetPulseBoost - m_currentPulseBoost) * lerpRate;
+        (targetPulseBoost - m_currentPulseBoost) *
+        std::min(1.0f, dt * pulseRate);
 
     float pulseSine = std::sin(m_time * 4.0f);
     float idlePulse = 0.08f * m_pulseStrengthMult * (pulseSine + 1.0f);
@@ -91,31 +103,50 @@ void BorderContainer::update(float dt) {
 
 void BorderContainer::createBorders(HypeSettings const& settings) {
     auto winSize = CCDirector::sharedDirector()->getWinSize();
-    float margin = static_cast<float>(settings.m_margin);
+    float maxMargin = std::max(
+        0.0f, std::min(winSize.width, winSize.height) * 0.5f - 1.0f
+    );
+    float margin = std::clamp(
+        static_cast<float>(settings.m_margin), 0.0f, maxMargin
+    );
     float spacing = std::max(10.0f, static_cast<float>(settings.m_spacing));
 
-    int countX = std::max(
-        1, static_cast<int>((winSize.width - margin * 2.0f) / spacing)
-    );
-    float spacingX = (winSize.width - margin * 2.0f) / countX;
+    float spanX = winSize.width - margin * 2.0f;
+    float spanY = winSize.height - margin * 2.0f;
+
+    int countX = std::max(1, static_cast<int>(spanX / spacing));
+    float spacingX = spanX / countX;
+
+    int countY = std::max(1, static_cast<int>(spanY / spacing));
+    float spacingY = spanY / countY;
+
+    int maxY = settings.m_showTop ? countY - 1 : countY;
+    int spriteIndex = 0;
+
+    for (int i = maxY; i >= 1; --i) {
+        float y = margin + i * spacingY;
+        this->addBorderSprite({margin, y}, spriteIndex++, settings);
+    }
 
     for (int i = 0; i <= countX; ++i) {
         float x = margin + i * spacingX;
-        this->addBorderSprite({x, margin}, i, settings);
-        if (settings.m_showTop) {
-            this->addBorderSprite({x, winSize.height - margin}, i, settings);
-        }
+        this->addBorderSprite({x, margin}, spriteIndex++, settings);
     }
 
-    int countY = std::max(
-        1, static_cast<int>((winSize.height - margin * 2.0f) / spacing)
-    );
-    float spacingY = (winSize.height - margin * 2.0f) / countY;
-
-    for (int i = 1; i < countY; ++i) {
+    for (int i = 1; i <= maxY; ++i) {
         float y = margin + i * spacingY;
-        this->addBorderSprite({margin, y}, i, settings);
-        this->addBorderSprite({winSize.width - margin, y}, i, settings);
+        this->addBorderSprite(
+            {winSize.width - margin, y}, spriteIndex++, settings
+        );
+    }
+
+    if (settings.m_showTop) {
+        for (int i = countX; i >= 0; --i) {
+            float x = margin + i * spacingX;
+            this->addBorderSprite(
+                {x, winSize.height - margin}, spriteIndex++, settings
+            );
+        }
     }
 }
 
@@ -154,10 +185,12 @@ void BorderContainer::addBorderSprite(
     if (!sprite) return;
 
     auto texSize = sprite->getContentSize();
-    float sizeF = static_cast<float>(settings.m_spriteSize);
+    float maxDim = std::max(texSize.width, texSize.height);
+    if (maxDim <= 0.0f) return;
 
-    float baseScale = sizeF / std::max(texSize.width, texSize.height);
-    float scaleVar = 0.75f + std::fmod(index * 0.17f, 0.40f);
+    float sizeF = static_cast<float>(settings.m_spriteSize);
+    float baseScale = sizeF / maxDim;
+    float scaleVar = 0.68f + std::fmod(index * 0.17f, 0.35f);
     float scale = baseScale * scaleVar;
 
     sprite->setScale(scale);

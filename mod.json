@@ -48,7 +48,7 @@
 			"name": "Sprite Spacing",
 			"description": "Distance between sprites in pixels (lower = denser border).",
 			"default": 45,
-			"min": 1,
+			"min": 10,
 			"max": 100
 		},
 		"sprite-size": {

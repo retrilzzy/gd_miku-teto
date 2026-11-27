@@ -22,6 +22,7 @@ public:
 
     void onPlayerPush();
     void onPlayerRelease();
+    void resetInputState();
 
 private:
     void createBorders(HypeSettings const& settings);
@@ -38,7 +39,7 @@ private:
     float m_clickSpinBoost = 3.5f;
     float m_clickPulseBoost = 1.75f;
 
-    bool m_isHolding = false;
+    int m_heldInputs = 0;
     float m_pressImpulse = 0.0f;
     float m_currentSpinMult = 1.0f;
     float m_currentPulseBoost = 0.0f;
